@@ -1,8 +1,8 @@
 <a id="markdown-rolling" name="rolling"></a>
 # rolling
-[![GoDoc](https://godoc.org/github.com/asecurityteam/rolling?status.svg)](https://godoc.org/github.com/asecurityteam/rolling)
-[![Build Status](https://travis-ci.com/asecurityteam/rolling.png?branch=master)](https://travis-ci.com/asecurityteam/rolling)
-[![codecov.io](https://codecov.io/github/asecurityteam/rolling/coverage.svg?branch=master)](https://codecov.io/github/asecurityteam/rolling?branch=master)
+[![GoDoc](https://godoc.org/github.com/smallnest/rolling?status.svg)](https://godoc.org/github.com/smallnest/rolling)
+[![Build Status](https://travis-ci.com/smallnest/rolling.png?branch=master)](https://travis-ci.com/smallnest/rolling)
+[![codecov.io](https://codecov.io/github/smallnest/rolling/coverage.svg?branch=master)](https://codecov.io/github/smallnest/rolling?branch=master)
 
 **A rolling/sliding window implementation for Google-golang**
 
@@ -26,22 +26,22 @@
 ### Point Window
 
 ```golang
-var p = rolling.NewPointPolicy(rolling.NewWindow(5))
+var p = rollingwindow.NewPointPolicy[float64](rolling.NewWindow[float64](5))
 
-for x := 0; x < 5; x = x + 1 {
+for x := 0; x < 5; x++{
   p.Append(x)
 }
-p.Reduce(func(w Window) float64 {
+p.Reduce(func(w Window[float64]) float64 {
   fmt.Println(w) // [ [0] [1] [2] [3] [4] ]
   return 0
 })
 w.Append(5)
-p.Reduce(func(w Window) float64 {
+p.Reduce(func(w Window[float64]) float64 {
   fmt.Println(w) // [ [5] [1] [2] [3] [4] ]
   return 0
 })
 w.Append(6)
-p.Reduce(func(w Window) float64 {
+p.Reduce(func(w Window[float64]) float64 {
   fmt.Println(w) // [ [5] [6] [2] [3] [4] ]
   return 0
 })
@@ -58,7 +58,7 @@ for tracking data where time is not a factor.
 ### Time Window
 
 ```golang
-var p = rolling.NewTimeWindow(rolling.NewWindow(3000), time.Millisecond)
+var p = rollingwindow.NewTimeWindow[float64](rolling.NewWindow[float64](3000), time.Millisecond)
 var start = time.Now()
 for range time.Tick(time.Millisecond) {
   if time.Since(start) > 3*time.Second {
@@ -101,17 +101,8 @@ fmt.Println(p.Reduce(rolling.Percentile(99.9)))
 fmt.Println(p.Reduce(rolling.FastPercentile(99.9)))
 ```
 
-The `Count`, `Avg`, `Min`, `Max`, and `Sum` each perform their expected
-computation. The `Percentile` aggregator first takes the target percentile and
-returns an aggregating function that works identically to the `Sum`, et al.
-
-For cases of very large datasets, the `FastPercentile` can be used as a
-replacement for the standard percentile calculation. This alternative version
-uses the p-squared algorithm for estimating the percentile by processing
-only one value at a time, in any order. The results are quite accurate but can
-vary from the *actual* percentile by a small amount. It's a tradeoff of accuracy
-for speed when calculating percentiles from large data sets. For more on the
-p-squared algorithm see: <http://www.cs.wustl.edu/~jain/papers/ftp/psqr.pdf>.
+The `Avg`, `Min`, `Max`, and `Sum` each perform their expected
+computation. 
 
 <a id="markdown-custom-aggregations" name="custom-aggregations"></a>
 #### Custom Aggregations
@@ -133,36 +124,10 @@ func MyAggregate(w rolling.Window) float64 {
 }
 ```
 
-<a id="markdown-contributors" name="contributors"></a>
-## Contributors
-
-Pull requests, issues and comments welcome. For pull requests:
-
-*   Add tests for new features and bug fixes
-*   Follow the existing style
-*   Separate unrelated changes into multiple pull requests
-
-See the existing issues for things to start contributing.
-
-For bigger changes, make sure you start a discussion first by creating
-an issue and explaining the intended change.
-
-Atlassian requires contributors to sign a Contributor License Agreement,
-known as a CLA. This serves as a record stating that the contributor is
-entitled to contribute the code/documentation/translation to the project
-and is willing to have it used in distributions and derivative works
-(or is willing to transfer ownership).
-
-Prior to accepting your contributions we ask that you please follow the appropriate
-link below to digitally sign the CLA. The Corporate CLA is for those who are
-contributing as a member of an organization and the individual CLA is for
-those contributing as an individual.
-
-*   [CLA for corporate contributors](https://na2.docusign.net/Member/PowerFormSigning.aspx?PowerFormId=e1c17c66-ca4d-4aab-a953-2c231af4a20b)
-*   [CLA for individuals](https://na2.docusign.net/Member/PowerFormSigning.aspx?PowerFormId=3f94fbdc-2fbe-46ac-b14c-5d152700ae5d)
 
 <a id="markdown-license" name="license"></a>
 ## License
 
-Copyright (c) 2017 Atlassian and others.
+based on [asecurityteam/rolling](https://github.com/asecurityteam/rolling).
+
 Apache 2.0 licensed, see [LICENSE.txt](LICENSE.txt) file.

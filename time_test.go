@@ -1,4 +1,4 @@
-package rolling
+package rollingwindow
 
 import (
 	"fmt"
@@ -10,13 +10,14 @@ import (
 func TestTimeWindow(t *testing.T) {
 	var bucketSize = time.Millisecond * 100
 	var numberBuckets = 10
-	var w = NewWindow(numberBuckets)
+	var w = NewWindow[float64](numberBuckets)
 	var p = NewTimePolicy(w, bucketSize)
-	for x := 0; x < numberBuckets; x = x + 1 {
+	for x := 0; x < numberBuckets; x++ {
 		p.Append(1)
 		time.Sleep(bucketSize)
 	}
-	var final = p.Reduce(func(w Window) float64 {
+
+	var final = p.Reduce(func(w Window[float64]) float64 {
 		var result float64
 		for _, bucket := range w {
 			for _, point := range bucket {
@@ -25,16 +26,16 @@ func TestTimeWindow(t *testing.T) {
 		}
 		return result
 	})
-	if final != float64(numberBuckets) {
+	if final < float64(numberBuckets)-1 {
 		t.Fatal(final)
 	}
 
-	for x := 0; x < numberBuckets; x = x + 1 {
+	for x := 0; x < numberBuckets; x++ {
 		p.Append(2)
 		time.Sleep(bucketSize)
 	}
 
-	final = p.Reduce(func(w Window) float64 {
+	final = p.Reduce(func(w Window[float64]) float64 {
 		var result float64
 		for _, bucket := range w {
 			for _, point := range bucket {
@@ -43,15 +44,29 @@ func TestTimeWindow(t *testing.T) {
 		}
 		return result
 	})
-	if final != 2*float64(numberBuckets) {
+	if final < 2*float64(numberBuckets)-2 {
 		t.Fatal("got", final, "expected", 2*float64(numberBuckets))
+	}
+
+	time.Sleep(2 * time.Second)
+	final = p.Reduce(func(w Window[float64]) float64 {
+		var result float64
+		for _, bucket := range w {
+			for _, point := range bucket {
+				result = result + point
+			}
+		}
+		return result
+	})
+	if final != 0 {
+		t.Fatal("got", final, "expected", 0)
 	}
 }
 
 func TestTimeWindowSelectBucket(t *testing.T) {
 	var bucketSize = time.Millisecond * 50
 	var numberBuckets = 10
-	var w = NewWindow(numberBuckets)
+	var w = NewWindow[float64](numberBuckets)
 	var p = NewTimePolicy(w, bucketSize)
 	var target = time.Unix(0, 0)
 	var adjustedTime, bucket = p.selectBucket(target)
@@ -78,7 +93,7 @@ func TestTimeWindowSelectBucket(t *testing.T) {
 func TestTimeWindowConsistency(t *testing.T) {
 	var bucketSize = time.Millisecond * 50
 	var numberBuckets = 10
-	var w = NewWindow(numberBuckets)
+	var w = NewWindow[float64](numberBuckets)
 	var p = NewTimePolicy(w, bucketSize)
 	for offset := range p.window {
 		p.window[offset] = append(p.window[offset], 1)
@@ -103,7 +118,7 @@ func TestTimeWindowConsistency(t *testing.T) {
 	if len(p.window[0]) != 1 {
 		t.Fatal("data loss while adjusting internal state")
 	}
-	for x := 1; x < 5; x = x + 1 {
+	for x := 1; x < 5; x++ {
 		if len(p.window[x]) != 0 {
 			t.Fatal("internal state not kept consistent during time gap")
 		}
@@ -113,7 +128,7 @@ func TestTimeWindowConsistency(t *testing.T) {
 func TestTimeWindowDataRace(t *testing.T) {
 	var bucketSize = time.Millisecond
 	var numberBuckets = 1000
-	var w = NewWindow(numberBuckets)
+	var w = NewWindow[float64](numberBuckets)
 	var p = NewTimePolicy(w, bucketSize)
 	var stop = make(chan bool)
 	go func() {
@@ -134,7 +149,7 @@ func TestTimeWindowDataRace(t *testing.T) {
 			case <-stop:
 				return
 			default:
-				_ = p.Reduce(func(w Window) float64 {
+				_ = p.Reduce(func(w Window[float64]) float64 {
 					for _, bucket := range w {
 						for _, p := range bucket {
 							v = v + p
@@ -180,11 +195,11 @@ func BenchmarkTimeWindow(b *testing.B) {
 	b.ResetTimer()
 	for _, option := range options {
 		b.Run(option.name, func(bt *testing.B) {
-			var w = NewWindow(option.numberBuckets)
+			var w = NewWindow[float64](option.numberBuckets)
 			var p = NewTimePolicy(w, option.bucketSize)
 			bt.ResetTimer()
 			for n := 0; n < bt.N; n = n + 1 {
-				for x := 0; x < option.insertions; x = x + 1 {
+				for x := 0; x < option.insertions; x++ {
 					p.Append(1)
 				}
 			}

@@ -1,4 +1,4 @@
-package rolling
+package rollingwindow
 
 import (
 	"sync"
@@ -7,12 +7,12 @@ import (
 
 // TimePolicy is a window Accumulator implementation that uses some
 // duration of time to determine the content of the window.
-type TimePolicy struct {
+type TimePolicy[T any] struct {
 	bucketSize        time.Duration
 	bucketSizeNano    int64
 	numberOfBuckets   int
 	numberOfBuckets64 int64
-	window            [][]float64
+	window            [][]T
 	lastWindowOffset  int
 	lastWindowTime    int64
 	lock              *sync.Mutex
@@ -23,8 +23,8 @@ type TimePolicy struct {
 // points are received entire windows aparts then the window will only contain
 // a single data point. If one or more durations of the window are missed then
 // they are zeroed out to keep the window consistent.
-func NewTimePolicy(window Window, bucketDuration time.Duration) *TimePolicy {
-	return &TimePolicy{
+func NewTimePolicy[T any](window Window[T], bucketDuration time.Duration) *TimePolicy[T] {
+	return &TimePolicy[T]{
 		bucketSize:        bucketDuration,
 		bucketSizeNano:    bucketDuration.Nanoseconds(),
 		numberOfBuckets:   len(window),
@@ -34,13 +34,18 @@ func NewTimePolicy(window Window, bucketDuration time.Duration) *TimePolicy {
 	}
 }
 
-func (w *TimePolicy) resetWindow() {
+// Window returns the current window.
+func (w *TimePolicy[T]) Window() [][]T {
+	return w.window
+}
+
+func (w *TimePolicy[T]) resetWindow() {
 	for offset := range w.window {
 		w.window[offset] = w.window[offset][:0]
 	}
 }
 
-func (w *TimePolicy) resetBuckets(windowOffset int) {
+func (w *TimePolicy[T]) resetBuckets(windowOffset int) {
 	var distance = windowOffset - w.lastWindowOffset
 	// If the distance between current and last is negative then we've wrapped
 	// around the ring. Recalculate the distance.
@@ -53,7 +58,7 @@ func (w *TimePolicy) resetBuckets(windowOffset int) {
 	}
 }
 
-func (w *TimePolicy) keepConsistent(adjustedTime int64, windowOffset int) {
+func (w *TimePolicy[T]) keepConsistent(adjustedTime int64, windowOffset int) {
 	// If we've waiting longer than a full window for data then we need to clear
 	// the internal state completely.
 	if adjustedTime-w.lastWindowTime > w.numberOfBuckets64 {
@@ -66,21 +71,21 @@ func (w *TimePolicy) keepConsistent(adjustedTime int64, windowOffset int) {
 	}
 }
 
-func (w *TimePolicy) selectBucket(currentTime time.Time) (int64, int) {
+func (w *TimePolicy[T]) selectBucket(currentTime time.Time) (int64, int) {
 	var adjustedTime = currentTime.UnixNano() / w.bucketSizeNano
 	var windowOffset = int(adjustedTime % w.numberOfBuckets64)
 	return adjustedTime, windowOffset
 }
 
 // AppendWithTimestamp same as Append but with timestamp as parameter
-func (w *TimePolicy) AppendWithTimestamp(value float64, timestamp time.Time) {
+func (w *TimePolicy[T]) AppendWithTimestamp(value T, timestamp time.Time) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
 	var adjustedTime, windowOffset = w.selectBucket(timestamp)
 	w.keepConsistent(adjustedTime, windowOffset)
 	if w.lastWindowOffset != windowOffset {
-		w.window[windowOffset] = []float64{value}
+		w.window[windowOffset] = []T{value}
 	} else {
 		w.window[windowOffset] = append(w.window[windowOffset], value)
 	}
@@ -89,16 +94,32 @@ func (w *TimePolicy) AppendWithTimestamp(value float64, timestamp time.Time) {
 }
 
 // Append a value to the window using a time bucketing strategy.
-func (w *TimePolicy) Append(value float64) {
+func (w *TimePolicy[T]) Append(value T) {
 	w.AppendWithTimestamp(value, time.Now())
 }
 
 // Reduce the window to a single value using a reduction function.
-func (w *TimePolicy) Reduce(f func(Window) float64) float64 {
+func (w *TimePolicy[T]) Reduce(f func(Window[T]) T) T {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
 	var adjustedTime, windowOffset = w.selectBucket(time.Now())
 	w.keepConsistent(adjustedTime, windowOffset)
 	return f(w.window)
+}
+
+// Count returns counts of values in the window.
+func (w *TimePolicy[T]) Count() int {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	var adjustedTime, windowOffset = w.selectBucket(time.Now())
+	w.keepConsistent(adjustedTime, windowOffset)
+
+	var result int
+	for _, bucket := range w.window {
+		result += len(bucket)
+	}
+
+	return result
 }
